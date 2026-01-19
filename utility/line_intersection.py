@@ -6,6 +6,7 @@ def line_intersection(p1, p2, p3, p4):
     Returns the intersection point of line segments (p1-p2) and (p3-p4),
     or None if they don't intersect.
     """
+
     x1, y1 = p1
     x2, y2 = p2
     x3, y3 = p3

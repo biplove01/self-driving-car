@@ -21,20 +21,6 @@ class Car:
         screen.blit(rotated_car, rotated_car.get_rect(center=self.pos))
 
 
-    def update_physics(self):
-
-        if self.speed > 0:
-            self.speed = max(0, self.speed - FRICTION)
-        elif self.speed < 0:
-            self.speed = min(0, self.speed + FRICTION)
-        if abs(self.speed) < FRICTION:
-            self.speed = 0
-
-        # Compute direction
-        direction = pygame.Vector2(0, -1).rotate(self.angle)
-        return direction * self.speed
-
-
     def move(self, walls):
         keys = pygame.key.get_pressed()
 
@@ -61,13 +47,23 @@ class Car:
             if self.speed <= MAX_REVERSE_SPEED:
                 self.speed = MAX_REVERSE_SPEED
 
-        self.update_physics()  # just updates speed/angle, not position yet
+        self.update_physics()
+
+
+    def update_physics(self):
+        if self.speed > 0:
+            self.speed = max(0, self.speed - FRICTION)
+        elif self.speed < 0:
+            self.speed = min(0, self.speed + FRICTION)
+        if abs(self.speed) < FRICTION:
+            self.speed = 0
 
 
     def update_position(self, walls):
         # Get desired movement vector
         direction = pygame.Vector2(0, -1).rotate(self.angle)
         displacement = direction * self.speed
+        # print(f"Displacement: {displacement}")
 
         next_pos = self.pos + displacement
 
@@ -86,12 +82,37 @@ class Car:
             # Optional: reduce speed on collision (optional realism)
             self.speed = 0
 
+
     def get_ray_data(self, walls):
         data = []
-        for i in range(RAY_COUNT):
-            angle_offset = (i - RAY_COUNT // 2) * (120 / max(1, RAY_COUNT - 1))
-            ray_angle = self.angle + angle_offset
-            direction = pygame.Vector2(0, -1).rotate(ray_angle)
+        for i in range(RAY_COUNT_FRONT):
+            angle_offset_front = -60 + i * (120 / max(1, RAY_COUNT_FRONT - 1))
+            ray_angle_front = self.angle + angle_offset_front
+
+            direction = pygame.Vector2(0, -1).rotate(ray_angle_front)
+            ray_end = self.pos + direction * RAY_LENGTH
+
+            closest_point = None
+            closest_dist = RAY_LENGTH
+
+            for wall in walls:
+                intersect = line_intersection(self.pos, ray_end, wall.start, wall.end)
+                if intersect:
+                    dist = self.pos.distance_to(intersect)
+                    if dist < closest_dist:
+                        closest_dist = dist
+                        closest_point = intersect
+
+            if closest_point:
+                data.append((closest_dist, closest_point))
+            else:
+                data.append((RAY_LENGTH, ray_end))
+
+        for i in range(RAY_COUNT_BACK):
+            angle_offset_back = 80 + i * (200 / max(1, RAY_COUNT_BACK - 1))
+            ray_angle_back = self.angle + angle_offset_back
+
+            direction = pygame.Vector2(0, -1).rotate(ray_angle_back)
             ray_end = self.pos + direction * RAY_LENGTH
 
             closest_point = None
@@ -159,16 +180,30 @@ def main():
 
         car.move(walls)
         car.update_position(walls)
-        car.draw_car(screen)
 
 
         ray_data = car.get_ray_data(walls)
+        color = (0, 150, 0)
 
         # Draw rays
         for dist, end_pos in ray_data:
-            color = RAY_COLOR if dist < RAY_LENGTH else (100, 100, 100)
-            pygame.draw.line(screen, color, car.pos, end_pos, 1)
 
+
+            d = min(dist, RAY_LENGTH)
+            t = d / RAY_LENGTH          # nromalizing to 1
+
+            # interpolate red → green
+            r = int(235 * (1 - t))
+            g = 50
+            b = 0
+
+            color = (r, g, b)
+
+
+            # color = RAY_COLOR if dist < RAY_LENGTH else (GREEN)
+            pygame.draw.line(screen, color, car.pos, end_pos, 2)
+
+        car.draw_car(screen)
 
 
         # define car
