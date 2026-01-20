@@ -1,9 +1,13 @@
 import pygame
 from variables import *
 import math
+import random
 
+from sprites import *
 from utility.distance_point_to_wall import distance_point_to_wall
 from utility.line_intersection import line_intersection
+
+
 
 
 class Car:
@@ -46,6 +50,7 @@ class Car:
             self.speed -= ACCELERATION
             if self.speed <= MAX_REVERSE_SPEED:
                 self.speed = MAX_REVERSE_SPEED
+
 
         self.update_physics()
 
@@ -133,38 +138,112 @@ class Car:
         return data
 
 
-class Wall:
-    def __init__(self, x1, y1, x2, y2):
-        self.start = pygame.Vector2(x1, y1)
-        self.end = pygame.Vector2(x2, y2)
+    def check_target_reached(self, target):
+        return target.is_reached(self.pos)
 
-    def draw(self, screen):
-        pygame.draw.line(screen, WHITE, self.start, self.end, 10)
+
+
+def spawn_target(walls, min_distance=20):
+
+    # Safe bounds: inside outer walls with margin
+    min_x, max_x = 60, GAME_WIDTH - 60
+    min_y, max_y = 60, GAME_HEIGHT - 60
+
+
+    for _ in range(100):
+        x = random.uniform(min_x, max_x)
+        y = random.uniform(min_y, max_y)
+        pos = pygame.Vector2(x, y)
+        if is_position_safe(pos, walls, min_distance):
+            print("First method success in creating target")
+            return Target(int(x), int(y))
+
+
+
+    best_pos = pygame.Vector2(GAME_WIDTH // 2, GAME_HEIGHT // 2)  # default center
+    best_dist = -1
+
+    # Use a coarse grid (adjust step for speed vs accuracy)
+    step = 20
+    x = min_x
+    while x <= max_x:
+        y = min_y
+        while y <= max_y:
+            pos = pygame.Vector2(x, y)
+            min_wall_dist = min(
+                distance_point_to_wall(pos, wall.start, wall.end)[0]
+                for wall in walls
+            )
+            if min_wall_dist > best_dist:
+                best_dist = min_wall_dist
+                best_pos = pos
+            y += step
+        x += step
+
+    print("Spawning target")
+
+    return Target(int(best_pos.x), int(best_pos.y))
+
+
+def is_position_safe(pos, walls, min_distance):
+    for wall in walls:
+        dist, _ = distance_point_to_wall(pos, wall.start, wall.end)
+        if dist < min_distance:
+            return False
+    return True
+
 
 
 def main():
     pygame.init()
     screen = pygame.display.set_mode((GAME_WIDTH, GAME_HEIGHT))
     clock = pygame.time.Clock()
-    car = Car(300, 300)
-
 
     running = True
 
+    # walls = [
+    #     Wall(50, 50, 750, 50),      # top wall
+    #     Wall(750, 50, 750, 550),    # right wall
+    #     Wall(750, 550, 50, 550),    # bottom wall
+    #     Wall(50, 550, 50, 50),      # left wall
+
+    #     Wall(150, 200, 300, 200),
+    #     Wall(500, 50, 500, 150),
+
+    #     Wall(200, 300, 200, 450),
+    #     Wall(330, 450, 480, 450),
+    #     Wall(600, 300, 400, 300),
+    #     Wall(600, 200, 600, 450),
+    # ]
+
     walls = [
-        Wall(50, 50, 750, 50),      # top wall
-        Wall(750, 50, 750, 550),    # right wall
-        Wall(750, 550, 50, 550),    # bottom wall
-        Wall(50, 550, 50, 50),      # left wall
+    # Outer boundary — full screen
+    Wall(0, 0, GAME_WIDTH, 0),
+    Wall(GAME_WIDTH, 0, GAME_WIDTH, GAME_HEIGHT),
+    Wall(GAME_WIDTH, GAME_HEIGHT, 0, GAME_HEIGHT),
+    Wall(0, GAME_HEIGHT, 0, 0),
 
-        Wall(150, 200, 300, 200),
-        Wall(500, 50, 500, 150),
+    Wall(150, 100, 350, 100),      # top-left horizontal
+    Wall(450, 100, 650, 100),      # top-right horizontal
 
-        Wall(200, 300, 200, 450),
-        Wall(330, 450, 480, 450),
-        Wall(600, 300, 400, 300),
-        Wall(600, 200, 600, 450),
-    ]
+    Wall(200, 150, 200, 250),      # left upper vertical
+    Wall(600, 150, 600, 250),      # right upper vertical
+
+    Wall(300, 280, 500, 280),      # center horizontal bar
+
+    Wall(200, 350, 200, 450),      # left lower vertical
+    Wall(600, 350, 600, 450),      # right lower vertical
+
+    Wall(150, 500, 350, 500),      # bottom-left horizontal
+    Wall(450, 500, 650, 500),      # bottom-right horizontal
+
+    Wall(380, 420, 420, 420),      # small mid-bottom block
+]
+
+    car = Car(300, 300)
+    target = spawn_target(walls)
+
+
 
     while running:
         for event in pygame.event.get():
@@ -173,7 +252,6 @@ def main():
 
 
         screen.fill(BLACK)
-        # car.move()
 
         for wall in walls:
             wall.draw(screen=screen)
@@ -181,14 +259,16 @@ def main():
         car.move(walls)
         car.update_position(walls)
 
+        if car.check_target_reached(target):
+            target = spawn_target(walls)
+        target.draw(screen)
+
 
         ray_data = car.get_ray_data(walls)
         color = (0, 150, 0)
 
         # Draw rays
         for dist, end_pos in ray_data:
-
-
             d = min(dist, RAY_LENGTH)
             t = d / RAY_LENGTH          # nromalizing to 1
 
@@ -198,9 +278,6 @@ def main():
             b = 0
 
             color = (r, g, b)
-
-
-            # color = RAY_COLOR if dist < RAY_LENGTH else (GREEN)
             pygame.draw.line(screen, color, car.pos, end_pos, 2)
 
         car.draw_car(screen)
